@@ -18,6 +18,7 @@ const ctx = canvas.getContext("2d");
 canvas.width = SCREEN_WIDTH;
 canvas.height = SCREEN_HEIGHT;
 
+ctx.save();
 // Flip the canvas' y-axis.
 ctx.scale(1, -1);
 // Move the canvas down by SCREEN_HEIGHT as it is currently above the viewport.
@@ -121,7 +122,6 @@ class EnemyMissile
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.r, 0, 2 * Math.PI);
         ctx.fill();
-        console.log("hi from enemy missile draw function.\n");
     }
 }
 
@@ -144,6 +144,7 @@ class EnemySpawner
             this.spawnEnemy();
         }
 
+        this.collisionDetection();
         if (this.enemiesCount > 0)
         {
             for (let i = 0; i < this.enemies.length; i++)
@@ -158,18 +159,90 @@ class EnemySpawner
         // An array of all indices of dead enemies
         let deadEnemies = [];
         let deadEnemiesCount = 0;
-        // Check for dead enemies
+        // Check for missiles out of bounds
         for (let i = 0; i < this.enemies.length; i++)
         {
-            let w = player.leftBattery.bullet.x-this.enemies[i].x,
-                h = player.leftBattery.bullet.x-this.enemies[i].y;
-            if (Math.sqrt((w*w)+(h*h)) < player.leftBattery.bullet.r+this.enemies[i].r)
+            let isOut = false;
+            if (this.x < 0) { isOut = true; };
+            if (this.x > SCREEN_WIDTH) { isOut = true; };
+            if (this.y < 0) { isOut = true; };
+            if (this.y > SCREEN_HEIGHT) { this.y = SCREEN_HEIGHT };
+            if (this.enemies[i].x < 0 || this.enemies[i].x > SCREEN_WIDTH || this.enemies[i].y < 0 || this.enemies[i].y > SCREEN_HEIGHT)
             {
                 deadEnemies[deadEnemiesCount] = i;
                 deadEnemiesCount += 1;
             }
         }
+        // Delete all dead enemies
+        for (let i = 0; i < deadEnemies.length; i++)
+        {
+            this.enemies.splice(deadEnemies[i], 1);
+            this.enemiesCount -= 1;
+        }
 
+        deadEnemies = [];
+        deadEnemiesCount = 0;
+        // Check for enemies that are hit by bullets
+        if (player.leftBattery.bullet.isExploding)
+        {
+            for (let i = 0; i < this.enemies.length; i++)
+            {
+                let w = player.leftBattery.bullet.x-this.enemies[i].x,
+                    h = player.leftBattery.bullet.y-this.enemies[i].y;
+                if (Math.sqrt((w*w)+(h*h)) < player.leftBattery.bullet.r+this.enemies[i].r)
+                {
+                    deadEnemies[deadEnemiesCount] = i;
+                    deadEnemiesCount += 1;
+                }
+            }
+        }
+        player.killedEnemyMissiles += deadEnemiesCount;
+        // Delete all dead enemies
+        for (let i = 0; i < deadEnemies.length; i++)
+        {
+            this.enemies.splice(deadEnemies[i], 1);
+            this.enemiesCount -= 1;
+        }
+        
+        deadEnemies = [];
+        deadEnemiesCount = 0;
+        if (player.midBattery.bullet.isExploding)
+        {
+            for (let i = 0; i < this.enemies.length; i++)
+            {
+                let w = player.midBattery.bullet.x-this.enemies[i].x,
+                    h = player.midBattery.bullet.y-this.enemies[i].y;
+                if (Math.sqrt((w*w)+(h*h)) < player.midBattery.bullet.r+this.enemies[i].r)
+                {
+                    deadEnemies[deadEnemiesCount] = i;
+                    deadEnemiesCount += 1;
+                }
+            }
+        }
+        player.killedEnemyMissiles += deadEnemiesCount;
+        // Delete all dead enemies
+        for (let i = 0; i < deadEnemies.length; i++)
+        {
+            this.enemies.splice(deadEnemies[i], 1);
+            this.enemiesCount -= 1;
+        }
+
+        deadEnemies = [];
+        deadEnemiesCount = 0;
+        if (player.rightBattery.bullet.isExploding)
+        {
+            for (let i = 0; i < this.enemies.length; i++)
+            {
+                let w = player.rightBattery.bullet.x-this.enemies[i].x,
+                    h = player.rightBattery.bullet.y-this.enemies[i].y;
+                if (Math.sqrt((w*w)+(h*h)) < player.rightBattery.bullet.r+this.enemies[i].r)
+                {
+                    deadEnemies[deadEnemiesCount] = i;
+                    deadEnemiesCount += 1;
+                }
+            }
+        }
+        player.killedEnemyMissiles += deadEnemiesCount;
         // Delete all dead enemies
         for (let i = 0; i < deadEnemies.length; i++)
         {
@@ -270,7 +343,6 @@ class Bullet
             {
                 if (tp1 - this.explosionTick <= this.explosionLength)
                 {
-                    console.log("tp1 - this.explosionTick = " + this.explosionTick + "\n");
                     // Interpolate the radius of the bullet at explosion time linearly.
                     // So if 250ms have passed the bullet will have a radius of 50 * 0.5 = 25; This may lead to a smaller bullet than before the explosion
                     // if the last game loop cycle was too short though.
@@ -405,7 +477,7 @@ class Crosshair
     {
         this.x = SCREEN_WIDTH / 2;
         this.y = SCREEN_HEIGHT / 2;
-        this.speed = 0.25;
+        this.speed = 0.5;
         this.velX = 0;
         this.velY = 0;
         this.color = "#ffffff";
@@ -478,6 +550,12 @@ class Player
 
         this.rightBattery.x = SCREEN_WIDTH - 100;
         this.rightBattery.y = 25;
+
+        this.killedEnemyMissiles = 0;
+        this.pointsPerEnemyMissile = 10;
+        this.score = 0;
+        this.colText = "#ffffff";
+        this.textSize = 24;
     }
 
     update()
@@ -489,6 +567,9 @@ class Player
         this.leftBattery.update();
         this.midBattery.update();
         this.rightBattery.update();
+
+        this.score = this.killedEnemyMissiles * this.pointsPerEnemyMissile;
+        this.draw();
     }
 
     handleInput()
@@ -496,6 +577,25 @@ class Player
         if (jPressed) { this.leftBattery.spawnBullet();  };
         if (kPressed) { this.midBattery.spawnBullet();   };
         if (lPressed) { this.rightBattery.spawnBullet(); };
+    }
+
+    draw()
+    {
+        // Draw score
+        ctx.textAlign = "center";
+        ctx.font = this.textSize + "px sans-serif";
+        ctx.fillStyle = this.colText;
+
+        //ctx.restore();
+        // This draws the text flipped as the ctx has been flipped horizontally.
+        //ctx.save();
+        // This can draw the text correctly, but results in very poor performance.
+        ctx.scale(1, 1);
+        ctx.transform(1, 0, 0, 1, 0, SCREEN_HEIGHT);
+        ctx.fillText(this.score, SCREEN_WIDTH/2, SCREEN_HEIGHT-50);
+
+        ctx.scale(1, -1);
+        ctx.transform(1, 0, 0, 1, 0, -SCREEN_HEIGHT);
     }
 }
 
