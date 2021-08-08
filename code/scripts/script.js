@@ -78,7 +78,7 @@ class Bullet
         this.x = SCREEN_WIDTH/2;
         this.y = SCREEN_HEIGHT/2;
         this.r = 2;
-        this.speed = 5;
+        this.speed = 1;
         this.velX = 0;
         this.velY = 0;
         // The start point of the bullet
@@ -91,15 +91,17 @@ class Bullet
         this.faceColor = "#ffffff";
         // Has the bullet reached it's target. The player's crosshair location when he fired or the edge of the viewport.
         this.hasHit = false;
-        // How long does the explosion last.
+        // How long does the explosion last. in ms
         this.explosionLength = 500;
         // The time point at which the explosion starts.
         this.explosionTick = Date.now();
         // How large is the radius of the explosion.
         this.explosionR = 50;
-        this.normalR = 1;
+        this.normalR = 2;
         this.isExploding = false;
+        // This is true when the bullet is spawned.
         this.isActive = false;
+        // When hitting a target, this is false.
         this.isMoving = false;
     }
 
@@ -126,14 +128,15 @@ class Bullet
 
             if (this.isExploding)
             {
-                if (tp1 - this.explosionTick < this.explosionLength)
+                if (tp1 - this.explosionTick <= this.explosionLength)
                 {
                     console.log("tp1 - this.explosionTick = " + this.explosionTick + "\n");
                     // Interpolate the radius of the bullet at explosion time linearly.
                     // So if 250ms have passed the bullet will have a radius of 50 * 0.5 = 25; This may lead to a smaller bullet than before the explosion
                     // if the last game loop cycle was too short though.
-                    //this.r = this.explosionR * (this.explosionLength / (tp1 - this.explosionTick));
-                    this.r += 1;
+                    // This did lead to radii of -0.1 so I added a 1 in front, so it will always be greater than 0.
+                    this.r = 1 + this.explosionR * ((tp1 - this.explosionTick) / this.explosionLength);
+                    //this.r += 1;
                 }
                 // If the explosion has finished, despawn the bullet.
                 else if (tp1 - this.explosionTick > this.explosionLength)
@@ -160,10 +163,27 @@ class Bullet
                 {
                     this.hasHit = true;
                 }
-
-                // If bullet is at the location the player has started firing at.
-                if (this.p1X-this.x < this.r && this.p1Y-this.y < this.r)
+                
+                // If bullet is at the location the player's crosshair was when he started firing.
+                let w = this.p1X-this.x,
+                    h = this.p1Y-this.y;
+                /*
+                if (Math.sqrt((w*w)+(h*h)) < this.r)//this.p1X-this.x < this.r && this.p1Y-this.y < this.r)
                 {
+                    this.hasHit = true;
+                }
+                */
+
+                // If the bullet has travelled a longer path than from start point to end point. So if it has overshot it's target.
+                let bw = this.x-this.p0X, // bulletpath width
+                    bh = this.y-this.p0Y, // bulletpath height
+                    pw = this.p1X-this.p0X, // spawnlocation-to-crosshair-location-path width
+                    ph = this.p1Y-this.p0Y; //spawnlocation-to-crosshair-location-path height
+
+                if (Math.sqrt((bw*bw)+(bh*bh)) > Math.sqrt((pw*pw)+(ph*ph)))
+                {
+                    this.x = this.p1X;
+                    this.y = this.p1Y;
                     this.hasHit = true;
                 }
             }
@@ -223,8 +243,8 @@ class Battery
             // Set angle according to path points
             this.bullet.angle = Math.atan(diffX/diffY) * 180/Math.PI;
 
-            this.bullet.velX = Math.sin(this.bullet.angle * Math.PI / 180);
-            this.bullet.velY = Math.cos(this.bullet.angle * Math.PI / 180);
+            this.bullet.velX = Math.sin(this.bullet.angle * Math.PI / 180)*this.bullet.speed*elapsedTime;
+            this.bullet.velY = Math.cos(this.bullet.angle * Math.PI / 180)*this.bullet.speed*elapsedTime;
         }
     }
 
@@ -245,6 +265,7 @@ class Crosshair
     {
         this.x = SCREEN_WIDTH / 2;
         this.y = SCREEN_HEIGHT / 2;
+        this.speed = 0.25;
         this.velX = 0;
         this.velY = 0;
         this.color = "#ffffff";
@@ -259,10 +280,10 @@ class Crosshair
 
     handleInput()
     {
-        if (wPressed) { this.y +=  1; console.log("w pressed\n"); };
-        if (aPressed) { this.x += -1; };
-        if (sPressed) { this.y += -1; };
-        if (dPressed) { this.x +=  1; };
+        if (wPressed) { this.y +=  this.speed * elapsedTime; };
+        if (aPressed) { this.x += -this.speed * elapsedTime; };
+        if (sPressed) { this.y += -this.speed * elapsedTime; };
+        if (dPressed) { this.x +=  this.speed * elapsedTime; };
     }
 
     collisionDetection()
@@ -275,6 +296,7 @@ class Crosshair
 
     draw()
     {
+        // Draw cross
         let chBarWidth = 2,
             chBarHeight = 5,
             chGap = 2;
@@ -287,6 +309,8 @@ class Crosshair
         //ctx.fillRect(this.x - chBarHeight, this.y + chBarWidth / 2, chBarHeight, chBarWidth);
         // Right line
         //ctx.fillRect(this.x              , this.y + chBarWidth / 2, chBarHeight, chBarWidth);
+
+        // Draw circle
         ctx.strokeStyle = this.color;
         ctx.beginPath();
         ctx.arc(this.x, this.y, 8, 0, 2 * Math.PI);
@@ -309,6 +333,7 @@ class Player
 
         this.midBattery.x = SCREEN_WIDTH/2 - this.midBattery.width/2;
         this.midBattery.y = 25;
+        this.midBattery.speed *= 2;
 
         this.rightBattery.x = SCREEN_WIDTH - 100;
         this.rightBattery.y = 25;
