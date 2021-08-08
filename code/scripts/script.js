@@ -74,12 +74,20 @@ class Bullet
 {
     constructor()
     {
-        this.x = 0;
-        this.y = 0;
-        this.r = 1;
+        // This prevents unspawned bullets from exploding right away because of being at the egde of the viewport.
+        this.x = SCREEN_WIDTH/2;
+        this.y = SCREEN_HEIGHT/2;
+        this.r = 2;
         this.speed = 5;
         this.velX = 0;
         this.velY = 0;
+        // The start point of the bullet
+        this.p0X = 0;
+        this.p0Y = 0;
+        // The end point of the bullet
+        this.p1X = 0;
+        this.p1Y = 0;
+        this.angle = 0;
         this.faceColor = "#ffffff";
         // Has the bullet reached it's target. The player's crosshair location when he fired or the edge of the viewport.
         this.hasHit = false;
@@ -91,56 +99,73 @@ class Bullet
         this.explosionR = 50;
         this.normalR = 1;
         this.isExploding = false;
-        this.isActive = true;
+        this.isActive = false;
+        this.isMoving = false;
     }
 
     update()
     {
         if (this.isActive)
         {
-            this.x += this.velX;
-            this.y += this.velY;
+            if (this.hasHit)
+            {
+                this.velX = 0;
+                this.velY = 0;
+
+                this.explosionTick = Date.now();
+                this.hasHit = false;
+                this.isMoving = false;
+                this.isExploding = true;
+            }
+
+            if (this.isMoving)
+            {
+                this.x += this.velX;
+                this.y += this.velY;
+            }
+
+            if (this.isExploding)
+            {
+                if (tp1 - this.explosionTick < this.explosionLength)
+                {
+                    console.log("tp1 - this.explosionTick = " + this.explosionTick + "\n");
+                    // Interpolate the radius of the bullet at explosion time linearly.
+                    // So if 250ms have passed the bullet will have a radius of 50 * 0.5 = 25; This may lead to a smaller bullet than before the explosion
+                    // if the last game loop cycle was too short though.
+                    //this.r = this.explosionR * (this.explosionLength / (tp1 - this.explosionTick));
+                    this.r += 1;
+                }
+                // If the explosion has finished, despawn the bullet.
+                else if (tp1 - this.explosionTick > this.explosionLength)
+                {
+                    this.isExploding = false;
+                    this.r = 2;
+                    this.isActive = false;
+                }
+            }
 
             this.collisionDetection();
+            this.draw();
         }
-
-        if (this.hasHit)
-        {
-            this.velX = 0;
-            this.velY = 0;
-
-            this.explosionTick = Date.now();
-            this.hasHit = false;
-            this.isExploding = true;
-        }
-
-        if (this.isExploding)
-        {
-            if (tp1 - this.explosionTick < this.explosionLength)
-            {
-                // Interpolate the radius of the bullet at explosion time linearly.
-                // So if 250ms have passed the bullet will have a radius of 50 * 0.5 = 25; This may lead to a smaller bullet than before the explosion
-                // if the last game loop cycle was too short though.
-                this.r = this.explosionR * (this.explosionLength / (tp1 - this.explosionTick));
-            }
-            else if (tp1 - this.explosionTick > this.explosionLength)
-            {
-                this.hasHit = false;
-                this.isExploding = false;
-                this.isActive = false;
-            }
-        }
-        this.draw();
     }
 
     collisionDetection()
     {
         if (!this.hasHit)
         {
-            // If bullet is at edge of viewport
-            if (this.x-this.r < 0 || this.x+this.r > SCREEN_WIDTH || this.y-this.r < 0 || this.y+this.r > SCREEN_HEIGHT)
+            if (!this.isExploding)
             {
-                this.hasHit = true;
+                // If bullet is at edge of viewport
+                if (this.x-this.r < 0 || this.x+this.r > SCREEN_WIDTH || this.y-this.r < 0 || this.y+this.r > SCREEN_HEIGHT)
+                {
+                    this.hasHit = true;
+                }
+
+                // If bullet is at the location the player has started firing at.
+                if (this.p1X-this.x < this.r && this.p1Y-this.y < this.r)
+                {
+                    this.hasHit = true;
+                }
             }
         }
     }
@@ -164,15 +189,43 @@ class Battery
         this.height = 25;
         this.faceColor = "#bbbbbb";
         this.shootingAngle = 45;
-        this.bulletSpeed = 1;
-        this.bulletX = 0;
-        this.bulletY = 0;
+        this.bullet = new Bullet;
     }
 
     update()
     {
+        this.bullet.update();
         this.collisionDetection();
         this.draw()
+    }
+
+    spawnBullet()
+    {
+        if (!this.bullet.isActive)
+        {
+            this.bullet.isActive = true;
+            this.bullet.isMoving = true;
+
+            // Get start and end point of bullet path
+            this.bullet.p0X = this.x + this.width/2;
+            this.bullet.p0Y = this.y + this.height/2;
+            this.bullet.p1X = player.crosshair.x;
+            this.bullet.p1Y = player.crosshair.y;
+
+            // Put bullet at start of path
+            this.bullet.x = this.bullet.p0X;
+            this.bullet.y = this.bullet.p0Y;
+
+            // Get width and height difference of bullet start and end points
+            let diffX = this.bullet.p1X - this.bullet.p0X;
+            let diffY = this.bullet.p1Y - this.bullet.p0Y;
+
+            // Set angle according to path points
+            this.bullet.angle = Math.atan(diffX/diffY) * 180/Math.PI;
+
+            this.bullet.velX = Math.sin(this.bullet.angle * Math.PI / 180);
+            this.bullet.velY = Math.cos(this.bullet.angle * Math.PI / 180);
+        }
     }
 
     collisionDetection()
@@ -254,7 +307,7 @@ class Player
         this.leftBattery.x = 50;
         this.leftBattery.y = 25;
 
-        this.midBattery.x = SCREEN_WIDTH/2 - this.midBattery.width;
+        this.midBattery.x = SCREEN_WIDTH/2 - this.midBattery.width/2;
         this.midBattery.y = 25;
 
         this.rightBattery.x = SCREEN_WIDTH - 100;
@@ -263,11 +316,20 @@ class Player
 
     update()
     {
+        this.handleInput();
+
         this.crosshair.update();
 
         this.leftBattery.update();
         this.midBattery.update();
         this.rightBattery.update();
+    }
+
+    handleInput()
+    {
+        if (jPressed) { this.leftBattery.spawnBullet();  };
+        if (kPressed) { this.midBattery.spawnBullet();   };
+        if (lPressed) { this.rightBattery.spawnBullet(); };
     }
 }
 
