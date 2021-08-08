@@ -70,6 +70,146 @@ function keyUpHandler(e)
 }
 
 /* Class Definitions */
+class EnemyMissile
+{
+    constructor()
+    {
+        this.x = 0;
+        this.y = 0;
+        this.r = 5;
+        this.velX = 0;
+        this.velY = 0;
+        this.spawnX = 0;
+        this.spawnY = 0;
+        this.destX = 0;
+        this.destY = 0;
+        this.angle = 0;
+        this.speed = 0.1;
+        this.colMissile = "#bb4444";
+        this.colTrail = "#c2c2c2";
+    }
+
+    update()
+    {
+        this.x -= this.velX;
+        this.y -= this.velY;
+        //this.collisionDetection();
+        this.draw();
+    }
+
+    collisionDetection()
+    {
+        // If enemy missile it out of bounds which very rarely happens by a few pixels even though the random numbers are chosen within the SCREEN_WIDTH
+        if (this.x < 0) { this.x = 0 };
+        if (this.x > SCREEN_WIDTH) { this.x = SCREEN_WIDTH };
+        if (this.y < 0) { this.y = 0 };
+        if (this.y > SCREEN_HEIGHT) { this.y = SCREEN_HEIGHT };
+    }
+
+    draw()
+    {
+        // Draw trail
+        ctx.strokeStyle = this.colTrail;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(this.spawnX, this.spawnY);
+        ctx.lineTo(this.x, this.y);
+        ctx.stroke();
+
+        // Draw missile
+        ctx.fillStyle = this.colMissile;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.r, 0, 2 * Math.PI);
+        ctx.fill();
+        console.log("hi from enemy missile draw function.\n");
+    }
+}
+
+class EnemySpawner
+{
+    constructor()
+    {
+        this.enemies = [];
+        this.enemiesCount = 0;
+        // How often is a new enemy missile spawned
+        this.spawnInterval = 1500;
+        this.spawnTick = Date.now();
+    }
+
+    update()
+    {
+        if (tp1 - this.spawnTick >= this.spawnInterval)
+        {
+            this.spawnTick = Date.now();
+            this.spawnEnemy();
+        }
+
+        if (this.enemiesCount > 0)
+        {
+            for (let i = 0; i < this.enemies.length; i++)
+            {
+                this.enemies[i].update();
+            }
+        }
+    }
+
+    collisionDetection()
+    {
+        // An array of all indices of dead enemies
+        let deadEnemies = [];
+        let deadEnemiesCount = 0;
+        // Check for dead enemies
+        for (let i = 0; i < this.enemies.length; i++)
+        {
+            let w = player.leftBattery.bullet.x-this.enemies[i].x,
+                h = player.leftBattery.bullet.x-this.enemies[i].y;
+            if (Math.sqrt((w*w)+(h*h)) < player.leftBattery.bullet.r+this.enemies[i].r)
+            {
+                deadEnemies[deadEnemiesCount] = i;
+                deadEnemiesCount += 1;
+            }
+        }
+
+        // Delete all dead enemies
+        for (let i = 0; i < deadEnemies.length; i++)
+        {
+            this.enemies.splice(deadEnemies[i], 1);
+            this.enemiesCount -= 1;
+        }
+    }
+
+    spawnEnemy()
+    {
+        // Add new enemy to array
+        this.enemies[this.enemiesCount] = new EnemyMissile;
+
+        // Assign coordinates for start and end position
+        this.enemies[this.enemiesCount].spawnX = getRandomIntInclusive(0, SCREEN_WIDTH);
+        this.enemies[this.enemiesCount].spawnY = SCREEN_HEIGHT;
+
+        this.enemies[this.enemiesCount].destX = getRandomIntInclusive(0, SCREEN_WIDTH);
+        this.enemies[this.enemiesCount].destY = 25;
+
+        // Move enemy missile to spawn coordinates
+        this.enemies[this.enemiesCount].x = this.enemies[this.enemiesCount].spawnX;
+        this.enemies[this.enemiesCount].y = this.enemies[this.enemiesCount].spawnY;
+
+        // Get width and height difference of enemy missile start and end points
+        let diffX = this.enemies[this.enemiesCount].destX-this.enemies[this.enemiesCount].spawnX;
+        let diffY = this.enemies[this.enemiesCount].destY-this.enemies[this.enemiesCount].spawnY;
+
+        // Set angle according to path points
+        this.enemies[this.enemiesCount].angle = Math.atan(diffX/diffY) * 180/Math.PI;
+
+        // Get velocity from angle
+        this.enemies[this.enemiesCount].velX = Math.sin(this.enemies[this.enemiesCount].angle * Math.PI / 180)*this.enemies[this.enemiesCount].speed*elapsedTime;
+        this.enemies[this.enemiesCount].velY = Math.cos(this.enemies[this.enemiesCount].angle * Math.PI / 180)*this.enemies[this.enemiesCount].speed*elapsedTime;
+
+        this.enemiesCount += 1;
+        console.log("Spawned new enemy missile.\n");
+    }
+}
+
 class Bullet
 {
     constructor()
@@ -219,6 +359,10 @@ class Battery
         this.draw()
     }
 
+    collisionDetection()
+    {
+    }
+
     spawnBullet()
     {
         if (!this.bullet.isActive)
@@ -246,10 +390,6 @@ class Battery
             this.bullet.velX = Math.sin(this.bullet.angle * Math.PI / 180)*this.bullet.speed*elapsedTime;
             this.bullet.velY = Math.cos(this.bullet.angle * Math.PI / 180)*this.bullet.speed*elapsedTime;
         }
-    }
-
-    collisionDetection()
-    {
     }
 
     draw()
@@ -312,6 +452,7 @@ class Crosshair
 
         // Draw circle
         ctx.strokeStyle = this.color;
+        ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.arc(this.x, this.y, 8, 0, 2 * Math.PI);
         ctx.stroke();
@@ -358,7 +499,17 @@ class Player
     }
 }
 
+/* Function definitions */
+function getRandomIntInclusive(min, max)
+{
+    min = Math.ceil(min);
+    max = Math.floor(max);
+    // The maximum and minimum are inclusive
+    return Math.floor(Math.random() * (max - min + 1) + min);
+}
+
 let player = new Player;
+let enemySpawner = new EnemySpawner;
 
 // Time variables
 let tp1 = Date.now();
@@ -381,6 +532,7 @@ window.main = function ()
     ctx.fillStyle = "#000000";
     ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 
+    enemySpawner.update();
     player.update();
 }
 
